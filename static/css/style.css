@@ -1,0 +1,96 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-color: #f4faff;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    color: #4caf50;
+    margin-bottom: 20px;
+}
+
+form {
+    margin: 50px 0;
+    display: flex;
+    flex-direction: column; /* Align elements vertically */
+    gap: 35px; /* Add spacing between the file input and button */
+}
+
+button {
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#progress {
+    margin-top: 20px;
+    font-size: 18px;
+    color: #4caf50;
+    font-weight: bold;
+}
+
+#results {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.card {
+    background: rgba(204, 255, 204, 0.8); /* Transparent background with green tint */
+    border: 1px solid #ddd;
+    border-radius: 50px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    max-width: 400px;
+    margin: 20px auto; /* Center the card on the page */
+    text-align: center;
+}
+
+.card h3 {
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.card pre {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin-top: 10px;
+}
+
+.hidden {
+    display: none;
+}
+
+.nutrition-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.nutrition-table td {
+    padding: 8px 12px;
+    border: none; /* Removes table lines */
+}
+
+.nutrition-table td:first-child {
+    font-weight: bold; /* Makes the first column bold */
+    text-align: left;
+}
+
+.nutrition-table td:last-child {
+    text-align: right;
+}
