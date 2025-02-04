@@ -14,10 +14,14 @@ YOLO_CONFIG = os.path.join(os.getcwd(), "yolov3.cfg")
 YOLO_WEIGHTS = os.path.join(os.getcwd(), "yolov3.weights")
 YOLO_CLASSES = os.path.join(os.getcwd(), "coco.names")
 
+# Sample nutrition data per 100g
 nutrition_data = {
+    "apple": {"calories": 52, "carbs": 14, "protein": 0.3, "fat": 0.2, "fiber": 2.4, "vitamin_c": 4.6, "potassium": 107},
     "banana": {"calories": 89, "carbs": 23, "protein": 1.1, "fat": 0.3, "fiber": 2.6, "vitamin_c": 8.7, "potassium": 358},
-    "orange": {"calories": 62, "carbs": 15.4, "protein": 1.2, "fat": 0.2, "fiber": 3.1, "vitamin_c": 53.2, "potassium": 237},
-    "apple": {"calories": 95, "carbs": 25, "protein": 0.5, "fat": 0.3, "fiber": 4.4, "vitamin_c": 8.4, "potassium": 195},
+    "carrot": {"calories": 41, "carbs": 10, "protein": 0.9, "fat": 0.2, "fiber": 2.8, "vitamin_c": 5.9, "potassium": 320},
+    "broccoli": {"calories": 55, "carbs": 11, "protein": 3.7, "fat": 0.6, "fiber": 2.6, "vitamin_c": 89.2, "potassium": 316},
+    "potato": {"calories": 77, "carbs": 17, "protein": 2, "fat": 0.1, "fiber": 2.2, "vitamin_c": 19.7, "potassium": 429},
+    "orange": {"calories": 47, "carbs": 12, "protein": 0.9, "fat": 0.1, "fiber": 2.4, "vitamin_c": 53.2, "potassium": 181},
 }
 
 # Load YOLO model
@@ -32,32 +36,57 @@ def index():
 
 
 @app.route('/upload', methods=['POST'])
-def upload_image():
-    if 'image' not in request.files:
-        return jsonify({"error": "No image file provided"}), 400
+def upload_images():
+    if 'image' not in request.files or 'weight' not in request.form:
+        return jsonify({"error": "Image and weight are required"}), 400
 
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({"error": "No image selected"}), 400
+    files = request.files.getlist('image')  # Retrieve multiple files
+    weight = request.form.get('weight', type=float)  # Get weight from form
+
+    if not files or weight <= 0:
+        return jsonify({"error": "Invalid image or weight"}), 400
 
     upload_folder = "static/uploads"
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)  # Ensure the uploads directory exists
+    os.makedirs(upload_folder, exist_ok=True)  # Ensure the uploads directory exists
 
-    file_path = os.path.join(upload_folder, file.filename)
-    try:
-        file.save(file_path)
-        logging.debug(f"File saved at: {file_path}")
-    except Exception as e:
-        logging.error(f"Failed to save file: {str(e)}")
-        return jsonify({"error": f"Failed to save file: {str(e)}"}), 500
+    detections_list = []
+    nutrition_list = []
+    total_nutrition = {"calories": 0, "macros": {"Carbs": 0, "Protein": 0, "Fat": 0, "Fiber": 0}, "micros": {"Vitamin C": 0, "Potassium": 0}}
 
-    detections, nutrition = detect_objects(file_path)
+    for file in files:
+        if file.filename == '':
+            continue
 
-    return jsonify({"detections": detections, "nutrition": nutrition})
+        file_path = os.path.join(upload_folder, file.filename)
+        try:
+            file.save(file_path)
+            logging.debug(f"File saved at: {file_path}")
+            detections, nutrition = detect_objects(file_path, weight)
+
+            detections_list.append({
+                "filename": file.filename,
+                "detections": detections
+            })
+            nutrition_list.append({
+                "filename": file.filename,
+                "nutrition": nutrition
+            })
+
+            # Sum nutrition values from the current image
+            total_nutrition["calories"] += nutrition["total_calories"]
+            for macro in nutrition["macros"]:
+                total_nutrition["macros"][macro] += nutrition["macros"][macro]
+            for micro in nutrition["micros"]:
+                total_nutrition["micros"][micro] += nutrition["micros"][micro]
+
+        except Exception as e:
+            logging.error(f"Failed to process file {file.filename}: {str(e)}")
+            return jsonify({"error": f"Failed to process file {file.filename}: {str(e)}"}), 500
+
+    return jsonify({"detections": detections_list, "nutrition": nutrition_list, "total_nutrition": total_nutrition})
 
 
-def detect_objects(image_path):
+def detect_objects(image_path, weight):
     image = cv2.imread(image_path)
     height, width, _ = image.shape
     blob = cv2.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
@@ -92,11 +121,11 @@ def detect_objects(image_path):
         for i in indices.flatten():
             detected_items.append(labels[i])
 
-    nutrition_summary = calculate_nutrition(detected_items)
+    nutrition_summary = calculate_nutrition(detected_items, weight)
     return detected_items, nutrition_summary
 
 
-def calculate_nutrition(detections):
+def calculate_nutrition(detections, weight):
     total_calories = 0
     macros = {"Carbs": 0, "Protein": 0, "Fat": 0, "Fiber": 0}
     micros = {"Vitamin C": 0, "Potassium": 0}
@@ -104,18 +133,19 @@ def calculate_nutrition(detections):
     for label in detections:
         if label in nutrition_data:
             item_data = nutrition_data[label]
-            total_calories += item_data["calories"]
-            macros["Carbs"] += item_data["carbs"]
-            macros["Protein"] += item_data["protein"]
-            macros["Fat"] += item_data["fat"]
-            macros["Fiber"] += item_data["fiber"]
-            micros["Vitamin C"] += item_data["vitamin_c"]
-            micros["Potassium"] += item_data["potassium"]
+            factor = weight / 100  # Scale nutrition per 100g
+            total_calories += item_data["calories"] * factor
+            macros["Carbs"] += item_data["carbs"] * factor
+            macros["Protein"] += item_data["protein"] * factor
+            macros["Fat"] += item_data["fat"] * factor
+            macros["Fiber"] += item_data["fiber"] * factor
+            micros["Vitamin C"] += item_data["vitamin_c"] * factor
+            micros["Potassium"] += item_data["potassium"] * factor
 
     return {
-        "total_calories": total_calories,
-        "macros": macros,
-        "micros": micros
+        "total_calories": round(total_calories, 2),
+        "macros": {k: round(v, 2) for k, v in macros.items()},
+        "micros": {k: round(v, 2) for k, v in micros.items()}
     }
 
 
